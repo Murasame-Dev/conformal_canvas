@@ -82,11 +82,27 @@ protected:
 
         beast::flat_buffer buf;
         beast::http::request_parser<beast::http::string_body> req_parser;
+        req_parser.body_limit(1024 * 1024 * 50);
 
-        co_await beast::http::async_read(socket, buf, req_parser, asio::use_awaitable);
+        beast::http::response<beast::http::string_body> res;
+        {
+            bool read_successful{false};
+            try {
+                co_await beast::http::async_read(socket, buf, req_parser, asio::use_awaitable);
+                read_successful = true;
+            } catch (const std::exception& e) {
+                std::println("handle_client: error reading request body: {}", e.what());
+                res.result(beast::http::status::bad_request);
+                res.body() = std::string("Error reading request body: ") + e.what();
+                res.prepare_payload();
+            }
+            if (!read_successful) {
+                co_await beast::http::async_write(socket, res, asio::use_awaitable);
+                co_return;
+            }
+        }
 
         auto req = req_parser.get();
-        beast::http::response<beast::http::string_body> res;
 
         std::print("method: {}, target: {}, version: {}\n",
             req.method_string(), req.target(), req.version());
@@ -160,20 +176,22 @@ protected:
         }
 
         std::vector<std::uint8_t> output_data{};
-        bool error_occurred{false};
-        try {
-            std::println("handle_escher: received {} bytes", input_data.size());
-            output_data = handle_escher_image(std::move(input_data));
-        } catch (const std::exception& e) {
-            std::println("handle_escher: processing error: {}", e.what());
-            res.result(beast::http::status::internal_server_error);
-            res.body() = std::string("Processing error: ") + e.what();
-            res.prepare_payload();
-            error_occurred = true;
-        }
-        if (error_occurred) {
-            co_await beast::http::async_write(socket, res, asio::use_awaitable);
-            co_return;
+        {
+            bool error_occurred{false};
+            try {
+                std::println("handle_escher: received {} bytes", input_data.size());
+                output_data = handle_escher_image(std::move(input_data));
+            } catch (const std::exception& e) {
+                std::println("handle_escher: processing error: {}", e.what());
+                res.result(beast::http::status::internal_server_error);
+                res.body() = std::string("Processing error: ") + e.what();
+                res.prepare_payload();
+                error_occurred = true;
+            }
+            if (error_occurred) {
+                co_await beast::http::async_write(socket, res, asio::use_awaitable);
+                co_return;
+            }
         }
 
         res.result(beast::http::status::ok);
@@ -236,23 +254,25 @@ protected:
         }
 
         std::vector<std::uint8_t> output_data{};
-        bool error_occurred{false};
-        try {
-            std::println("handle_conformal: received {} bytes, params count {}",
-                input_data.size(), params.size());
-            auto it = params.find("func");
-            std::string func_str{(*it).value};
-            output_data = handle_conformal_image(std::move(input_data), std::move(func_str));
-        } catch (const std::exception& e) {
-            std::println("handle_conformal: processing error: {}", e.what());
-            res.result(beast::http::status::internal_server_error);
-            res.body() = std::string("Processing error: ") + e.what();
-            res.prepare_payload();
-            error_occurred = true;
-        }
-        if (error_occurred) {
-            co_await beast::http::async_write(socket, res, asio::use_awaitable);
-            co_return;
+        {
+            bool error_occurred{false};
+            try {
+                std::println("handle_conformal: received {} bytes, params count {}",
+                    input_data.size(), params.size());
+                auto it = params.find("func");
+                std::string func_str{(*it).value};
+                output_data = handle_conformal_image(std::move(input_data), std::move(func_str));
+            } catch (const std::exception& e) {
+                std::println("handle_conformal: processing error: {}", e.what());
+                res.result(beast::http::status::internal_server_error);
+                res.body() = std::string("Processing error: ") + e.what();
+                res.prepare_payload();
+                error_occurred = true;
+            }
+            if (error_occurred) {
+                co_await beast::http::async_write(socket, res, asio::use_awaitable);
+                co_return;
+            }
         }
 
         res.result(beast::http::status::ok);
