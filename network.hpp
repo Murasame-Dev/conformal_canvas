@@ -71,12 +71,29 @@ protected:
         auto req = req_parser.get();
         beast::http::response<beast::http::string_body> res;
 
-        // std::print("{} {} {}\n", req.method_string(), req.target(), req.version());
+        std::print("{} {} {}\n", req.method_string(), req.target(), req.version());
         urls::url_view url{req.target()};
         
         if (url.path() != "/handle_escher_image" && url.path() != "/handle_conformal_image") {
             res.result(beast::http::status::not_found);
             res.body() = "404 Not found";
+            res.prepare_payload();
+            co_await beast::http::async_write(socket, res, asio::use_awaitable);
+            co_return;
+        }
+
+        if (req.method() == beast::http::verb::options) {
+            res.result(beast::http::status::ok);
+
+            auto origin = req[beast::http::field::origin];
+            if (!origin.empty()) {
+                res.set(beast::http::field::access_control_allow_origin, origin);
+            } else {
+                res.set(beast::http::field::access_control_allow_origin, "*");
+            }
+            res.set(beast::http::field::access_control_allow_methods, "POST, OPTIONS");
+            res.set(beast::http::field::access_control_allow_headers, "Content-Type, Origin");
+            res.set(beast::http::field::access_control_allow_credentials, "true");
             res.prepare_payload();
             co_await beast::http::async_write(socket, res, asio::use_awaitable);
             co_return;
