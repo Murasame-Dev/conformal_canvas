@@ -26,6 +26,7 @@ public:
     void run() {
         asio::co_spawn(m_io_ctx, listenerv4(), asio::detached);
         asio::co_spawn(m_io_ctx, listenerv6(), asio::detached);
+        std::println("network: starting, port {}", prot_num_value);
         m_io_ctx.run();
     }
 
@@ -35,13 +36,21 @@ protected:
         try {
             asio::ip::tcp::endpoint ep{asio::ip::address_v4(), prot_num_value};
             asio::ip::tcp::acceptor acceptor{executor, ep};
+            std::println("listener v4: listening on 0.0.0.0:{}", prot_num_value);
 
             for (;;) {
                 asio::ip::tcp::socket socket = co_await acceptor.async_accept(asio::use_awaitable);
+                try {
+                    auto ep = socket.remote_endpoint();
+                    std::println("listener v4: accepted {}:{}", ep.address().to_string(), ep.port());
+                } catch (const std::exception &e) {
+                    std::println("listener v4: accepted connection (remote endpoint unavailable): {}",
+                        e.what());
+                }
                 asio::co_spawn(executor, handle_client(std::move(socket)), asio::detached);
             }
         } catch (const std::system_error& err) {
-            std::println("error: {}", err.what());
+            std::println("listener v4 error: {}", err.what());
         }
     }
 
@@ -50,13 +59,21 @@ protected:
         try {
             asio::ip::tcp::endpoint ep{asio::ip::address_v6(), prot_num_value};
             asio::ip::tcp::acceptor acceptor{executor, ep};
+            std::println("listener v6: listening on [::]:{}", prot_num_value);
 
             for (;;) {
                 asio::ip::tcp::socket socket = co_await acceptor.async_accept(asio::use_awaitable);
+                try {
+                    auto ep = socket.remote_endpoint();
+                    std::println("listener v6: accepted {}:{}", ep.address().to_string(), ep.port());
+                } catch (const std::exception &e) {
+                    std::println("listener v6: accepted connection (remote endpoint unavailable): {}",
+                        e.what());
+                }
                 asio::co_spawn(executor, handle_client(std::move(socket)), asio::detached);
             }
         } catch (const std::system_error& err) {
-            std::println("error: {}", err.what());
+            std::println("listener v6 error: {}", err.what());
         }
     }
 
@@ -71,7 +88,8 @@ protected:
         auto req = req_parser.get();
         beast::http::response<beast::http::string_body> res;
 
-        std::print("{} {} {}\n", req.method_string(), req.target(), req.version());
+        std::print("method: {}, target: {}, version: {}\n",
+            req.method_string(), req.target(), req.version());
         urls::url_view url{req.target()};
         
         if (url.path() != "/handle_escher_image" && url.path() != "/handle_conformal_image") {
@@ -117,9 +135,13 @@ protected:
         }
 
         if (url.path() == "/handle_escher_image") {
-            asio::co_spawn(executor, handle_escher(std::move(socket), std::move(req)), asio::detached);
+            std::println("handle_client: spawning escher handler");
+            asio::co_spawn(executor, handle_escher(std::move(socket),
+            std::move(req)), asio::detached);
         } else if (url.path() == "/handle_conformal_image") {
-            asio::co_spawn(executor, handle_conformal(std::move(socket), std::move(req)), asio::detached);
+            std::println("handle_client: spawning conformal handler");
+            asio::co_spawn(executor, handle_conformal(std::move(socket),
+            std::move(req)), asio::detached);
         }
     }
 
@@ -140,8 +162,10 @@ protected:
         std::vector<std::uint8_t> output_data{};
         bool error_occurred{false};
         try {
+            std::println("handle_escher: received {} bytes", input_data.size());
             output_data = handle_escher_image(std::move(input_data));
         } catch (const std::exception& e) {
+            std::println("handle_escher: processing error: {}", e.what());
             res.result(beast::http::status::internal_server_error);
             res.body() = std::string("Processing error: ") + e.what();
             res.prepare_payload();
@@ -158,9 +182,11 @@ protected:
         res.prepare_payload();
 
         co_await beast::http::async_write(socket, res, asio::use_awaitable);
+        std::println("handle_escher: response sent, {} bytes", res.body().size());
 
         beast::error_code ec;
         socket.shutdown(asio::ip::tcp::socket::shutdown_send, ec);
+        std::println("handle_escher: socket shutdown (ec={})", ec.message());
     }
 
     std::vector<std::uint8_t> handle_escher_image(std::vector<std::uint8_t> data) {
@@ -212,10 +238,13 @@ protected:
         std::vector<std::uint8_t> output_data{};
         bool error_occurred{false};
         try {
+            std::println("handle_conformal: received {} bytes, params count {}",
+                input_data.size(), params.size());
             auto it = params.find("func");
             std::string func_str{(*it).value};
             output_data = handle_conformal_image(std::move(input_data), std::move(func_str));
         } catch (const std::exception& e) {
+            std::println("handle_conformal: processing error: {}", e.what());
             res.result(beast::http::status::internal_server_error);
             res.body() = std::string("Processing error: ") + e.what();
             res.prepare_payload();
@@ -232,9 +261,11 @@ protected:
         res.prepare_payload();
 
         co_await beast::http::async_write(socket, res, asio::use_awaitable);
+        std::println("handle_conformal: response sent, {} bytes", res.body().size());
 
         beast::error_code ec;
         socket.shutdown(asio::ip::tcp::socket::shutdown_send, ec);
+        std::println("handle_conformal: socket shutdown (ec={})", ec.message());
     }
 
     std::vector<std::uint8_t> handle_conformal_image(std::vector<std::uint8_t> data,
