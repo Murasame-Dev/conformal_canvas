@@ -30,7 +30,11 @@ else()
         URL https://github.com/beltoforion/muparserx/archive/refs/tags/v4.0.12.tar.gz)
     FetchContent_MakeAvailable(muparserx)
     set(MUPARSERX_LIBS muparserx)
-    set(MUPARSERX_INCLUDES ${muparserx_SOURCE_DIR}/parser)
+    # 源码目录为 parser/*.h, 而代码包含 <muparserx/mpParser.h>, 复制出带 muparserx/ 前缀的 include 目录
+    set(MUPARSERX_INCLUDES ${CMAKE_BINARY_DIR}/muparserx-include)
+    file(COPY ${muparserx_SOURCE_DIR}/parser/
+        DESTINATION ${MUPARSERX_INCLUDES}/muparserx
+        FILES_MATCHING PATTERN "*.h")
 endif()
 
 add_executable(conformal_canvas main.cpp
