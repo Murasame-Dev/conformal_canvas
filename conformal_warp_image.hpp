@@ -7,6 +7,7 @@
 #include <numbers>
 #include <numeric>
 #include <functional>
+#include <algorithm>
 #include <omp.h>
 
 #include "process_complex.hpp"
@@ -30,10 +31,10 @@ cv::Mat convert_escher(cv::Mat img, double scalar, double C, double SSAA_scalar 
     cv::Mat map_x{cv::Mat::zeros(resized_img.size(), CV_32FC1)};
     cv::Mat map_y{cv::Mat::zeros(resized_img.size(), CV_32FC1)};
     #pragma omp parallel for collapse(2)
-    for (int j = 0; j < resized_img.rows; ++j) {
-        for (int i = 0; i < resized_img.cols; ++i) {
-            cplx point = std::exp(std::log(cplx{static_cast<double>(i - mid_x) * scalar,
-                static_cast<double>(mid_y - j) * scalar}) / convert_C);
+    for (int i = 0; i < resized_img.rows; ++i) {
+        for (int j = 0; j < resized_img.cols; ++j) {
+            cplx point = std::exp(std::log(cplx{static_cast<double>(j - mid_x) * scalar,
+                static_cast<double>(mid_y - i) * scalar}) / convert_C);
             while (std::abs(point.real()) > mid_x) {
                 point /= C;
             }
@@ -64,19 +65,29 @@ cv::Mat convert_conformal(cv::Mat img, const std::string& expr, double SSAA_scal
     {
         complex_function thread_func{expr};
         #pragma omp for collapse(2)
-        for (int j = 0; j < resized_img.rows; ++j) {
-            for (int i = 0; i < resized_img.cols; ++i) {
-                cplx point{static_cast<double>(i - mid_x), static_cast<double>(mid_y - j)};
+        for (int i = 0; i < resized_img.rows; ++i) {
+            for (int j = 0; j < resized_img.cols; ++j) {
+                cplx point{static_cast<double>(j - mid_x), static_cast<double>(mid_y - i)};
                 cplx transformed_point;
                 try {
                     transformed_point = thread_func(point);
                 } catch(...) {
                     continue;
                 }
-                map_x.at<float>(i, j) = std::fmod(static_cast<float>(transformed_point.real() + mid_x),
-                    static_cast<float>(resized_img.cols));
-                map_y.at<float>(i, j) = std::fmod(static_cast<float>(mid_y - transformed_point.imag()),
-                    static_cast<float>(resized_img.rows));
+                double W = static_cast<double>(resized_img.cols);
+                double H = static_cast<double>(resized_img.rows);
+
+                double x = transformed_point.real() + mid_x;
+                double y = mid_y - transformed_point.imag();
+
+                x = x - W * std::floor(x / W);
+                y = y - H * std::floor(y / H);
+
+                x = std::clamp(x, 0.0, W - 1.0);
+                y = std::clamp(y, 0.0, H - 1.0);
+
+                map_x.at<float>(i, j) = static_cast<float>(x);
+                map_y.at<float>(i, j) = static_cast<float>(y);
             }
         }
     }
