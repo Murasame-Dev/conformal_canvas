@@ -31,6 +31,31 @@ cmake --build build -j"$(nproc)"
 ```
 
 ## HTTP 接口
+### 0. 使用说明
+- 方法：`GET`
+- 路径：`/`
+- 响应：`text/plain` 的接口使用说明（端点、参数、示例）
+
+示例：
+```sh
+curl http://127.0.0.1:7854/
+```
+
+### 通用查询参数
+- `format`：输出格式，可选 `png`（默认）、`jpeg`、`webp`、`bmp`、`gif`
+  - `format=gif` 时对输入图片逐帧变换并输出动画 GIF（帧延迟 100ms）
+  - 输入为 GIF 而输出非 `gif` 时仅处理第一帧
+  - 输入格式由文件内容自动识别（GIF 通过魔数检测），`png`/`jpeg`/`webp`/`bmp` 等均可作为输入
+
+示例（输出 JPEG）：
+```sh
+curl -X POST \
+	-H "Content-Type: image/png" \
+	--data-binary @input.png \
+	"http://127.0.0.1:7854/handle_escher_image?format=jpeg" \
+	--output output.jpg
+```
+
 ### 1. Escher 变换
 - 方法：`POST`
 - 路径：`/handle_escher_image`
@@ -51,8 +76,7 @@ curl -X POST \
 - 方法：`POST`
 - 路径：`/handle_conformal_image?func=...`
 - 请求体：原始图片二进制
-- `func`：复变函数表达式，变量名为 `z`
-- 默认表达式：`log(z)`
+- `func`：复变函数表达式，变量名为 `z`，默认 `log(z)`
 - 响应：处理后的 `PNG` 图片
 
 示例：
@@ -65,10 +89,27 @@ curl -X POST \
 ```
 其中 `'(' == %28` , `')' == %29`, `exp(z) == exp%28z%29`
 
+### 3. GIF 动画变换
+对动画 GIF 的每一帧做变换，输出仍为动画 GIF：
+```sh
+curl -X POST \
+	-H "Content-Type: image/gif" \
+	--data-binary @input.gif \
+	"http://127.0.0.1:7854/handle_escher_image?format=gif" \
+	--output output.gif
+```
+
 ### 常见返回
 - `404 Not Found`：路径不正确
 - `400 Bad Request`：不是 `POST`、缺少参数或图片为空
 - `415 Unsupported Media Type`：`Content-Type` 不是 `image/*`
+
+## 预编译二进制
+推送 `v*` 标签时 GitHub Actions 自动构建并发布 Release：
+- `conformal_canvas-linux-x86_64.tar.gz`
+- `conformal_canvas-windows-x64.zip`（含 exe 与所需 DLL）
+
+也可在 Actions 页面手动触发 `Release Binaries` 工作流，构建产物以 artifact 形式保留。
 
 ## Docker
 仓库会自动发布镜像到 GHCR，镜像名为：

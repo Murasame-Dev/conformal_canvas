@@ -1,0 +1,3 @@
+[submodule "third_party/muparserx"]
+	path = third_party/muparserx
+	url = https://github.com/beltoforion/muparserx.git

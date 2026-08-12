@@ -1,0 +1,19 @@
+{
+    "name": "conformal-canvas",
+    "version-string": "0.1.0",
+    "builtin-baseline": "aae277acf4e7de287ddb5e208b5316614de6aad7",
+    "dependencies": [
+        "boost-asio",
+        "boost-beast",
+        "boost-url",
+        {
+            "name": "opencv4",
+            "default-features": false,
+            "features": [
+                "jpeg",
+                "png",
+                "webp"
+            ]
+        }
+    ]
+}

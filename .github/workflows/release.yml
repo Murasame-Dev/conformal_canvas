@@ -1,0 +1,133 @@
+name: Release Binaries
+
+on:
+  push:
+    branches: ["master", "main"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux x86_64
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            g++-14 \
+            libboost-system-dev \
+            libboost-url-dev \
+            libmuparserx-dev \
+            libopencv-dev \
+            libomp-dev
+
+      - name: Configure
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release -j"$(nproc)"
+
+      - name: Package
+        run: |
+          strip build/conformal_canvas
+          mkdir -p dist/conformal_canvas-linux-x86_64
+          cp build/conformal_canvas readme.md dist/conformal_canvas-linux-x86_64/
+          tar -czvf conformal_canvas-linux-x86_64.tar.gz -C dist conformal_canvas-linux-x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformal_canvas-linux-x86_64
+          path: conformal_canvas-linux-x86_64.tar.gz
+          retention-days: 14
+
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies (vcpkg)
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: vcpkg.json
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\conformal_canvas-windows-x64 | Out-Null
+          Copy-Item build\Release\conformal_canvas.exe, build\Release\*.dll, readme.md `
+            -Destination dist\conformal_canvas-windows-x64
+          Compress-Archive -Path dist\conformal_canvas-windows-x64 `
+            -DestinationPath conformal_canvas-windows-x64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformal_canvas-windows-x64
+          path: conformal_canvas-windows-x64.zip
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: conformal_canvas-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create release and upload assets (gh CLI)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          ls -la dist/
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes "Automated release $TAG" \
+              --verify-tag
+          fi
+          gh release upload "$TAG" dist/* --clobber
+          gh release view "$TAG"
