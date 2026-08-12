@@ -1,0 +1,15 @@
+{
+    "name": "conformal-canvas",
+    "version-string": "0.1.0",
+    "dependencies": [
+        "boost-url",
+        {
+            "name": "opencv4",
+            "default-features": false,
+            "features": [
+                "jpeg",
+                "png"
+            ]
+        }
+    ]
+}
