@@ -4,6 +4,7 @@
 #include <boost/asio.hpp>
 #include <boost/url.hpp>
 #include <chrono>
+#include <cstdio>
 #include <format>
 #include <optional>
 #include <print>
@@ -40,6 +41,8 @@ void log(std::string_view component, std::format_string<Args...> fmt, Args&&... 
         static_cast<unsigned>(ymd.day()),
         tod.hours().count(), tod.minutes().count(), tod.seconds().count(),
         component, std::format(fmt, std::forward<Args>(args)...));
+    // 管道/重定向下 stdout 为全缓冲, 显式刷新保证日志实时可见 (如 docker logs)
+    std::fflush(stdout);
 }
 
 // 输出格式 (format 查询参数)
