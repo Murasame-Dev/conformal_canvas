@@ -369,7 +369,11 @@ protected:
 
         beast::error_code ec;
         socket.shutdown(asio::ip::tcp::socket::shutdown_send, ec);
-        log("handle_escher", "socket shutdown (ec={})", ec.message());
+        if (ec) {
+            log("handle_escher", "socket shutdown error: {}", ec.message());
+        } else {
+            log("handle_escher", "socket shutdown clean");
+        }
     }
 
     std::vector<std::uint8_t> handle_escher_image(std::vector<std::uint8_t> data,
@@ -443,7 +447,11 @@ protected:
 
         beast::error_code ec;
         socket.shutdown(asio::ip::tcp::socket::shutdown_send, ec);
-        log("handle_conformal", "socket shutdown (ec={})", ec.message());
+        if (ec) {
+            log("handle_conformal", "socket shutdown error: {}", ec.message());
+        } else {
+            log("handle_conformal", "socket shutdown clean");
+        }
     }
 
     std::vector<std::uint8_t> handle_conformal_image(std::vector<std::uint8_t> data,
